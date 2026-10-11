@@ -42,7 +42,7 @@ The generator (`scripts/generate.js`) is the build boundary between canonical so
 ```javascript
 {
   src: 'agents/architect.md',           // Source file
-  transforms: ['parse-frontmatter', 'extract-examples', 'rebuild-frontmatter', 'agent-stub'],  // Transform pipeline
+  transforms: ['rebuild-frontmatter', 'agent-stub'],  // Transform pipeline
   runtimes: ['gemini', 'claude', 'qwen'],       // Target runtimes
 }
 ```
@@ -52,23 +52,20 @@ Or with glob patterns:
 ```javascript
 {
   glob: 'agents/*.md',
-  transforms: ['parse-frontmatter', 'extract-examples', 'rebuild-frontmatter', 'agent-stub'],
+  transforms: ['rebuild-frontmatter', 'agent-stub'],
   runtimes: ['gemini', 'claude', 'qwen'],
 }
 ```
 
 ### Transform Pipeline
 
-The generator exposes 6 transforms (in `src/transforms/`, excluding the `index.js` barrel). Current manifest entries use a subset depending on the target surface.
+The generator exposes 3 transforms (in `src/transforms/`, excluding the `index.js` barrel). Current manifest entries use a subset depending on the target surface.
 
 | Transform | Purpose |
 |-----------|---------|
-| `parse-frontmatter` | Parse YAML frontmatter from source and stash it in pipeline state |
-| `extract-examples` | Extract `<example>` blocks from agent bodies (Claude only) |
-| `rebuild-frontmatter` | Emit runtime-specific YAML frontmatter (tools, fields, kind) |
+| `rebuild-frontmatter` | Parse source YAML frontmatter, extract `<example>` blocks from agent bodies (Claude only), and emit runtime-specific YAML frontmatter (tools, fields, kind) |
 | `agent-stub` | Replace agent body with MCP delegation stub referencing `get_agent()` |
 | `skill-discovery-stub` | Replace shared skill body with MCP tool stub referencing `get_skill_content()` |
-| `skill-metadata` | Inject `user-invocable: false` into Claude skill frontmatter |
 
 ### Runtime Definitions
 
@@ -103,15 +100,17 @@ The MCP server is authored directly in modular source under `src/mcp/`. Gemini a
 
 ```
 src/mcp/
-├── maestro-server.js           # Server entry-point (runRuntimeServer)
+├── maestro-server.js           # Server entry-point (main) + default tool pack order
 ├── content/
-│   ├── provider.js             # Content provider abstraction
 │   └── runtime-content.js      # Runtime-specific content resolution
+├── contracts/                  # Plan schema, workspace marker, cache-path and handoff contracts
 ├── core/
-│   ├── create-server.js        # Server factory + error sanitization
-│   ├── tool-registry.js        # Tool schema/handler composition
+│   ├── create-server.js        # Tool pack composition, dispatch + error sanitization
+│   ├── protocol-dispatcher.js  # JSON-RPC routing + tool result framing
+│   ├── project-root-cache.js   # Workspace path + workspace_suggestion
+│   ├── line-reader.js          # stdin line → JSON message dispatch
 │   └── recovery-hints.js       # Error → recovery guidance mapping
-├── handlers/                   # 12 handler implementations
+├── handlers/                   # 10 handler implementations
 │   ├── get-agent.js            # Agent methodology serving
 │   ├── get-skill-content.js    # Skill/template/reference serving
 │   ├── get-runtime-context.js  # Runtime config snapshot
@@ -119,31 +118,23 @@ src/mcp/
 │   ├── assess-task-complexity.js # Repo analysis signals
 │   ├── validate-plan.js        # Plan validation + dependency DAG
 │   ├── resolve-settings.js     # Config resolution
-│   ├── session-state-core.js   # Session-state transaction helpers
 │   ├── session-state-tools.js  # Session CRUD (create/get/update/transition/archive)
 │   ├── design-gate.js          # Design-gate lifecycle (3 tools)
-│   ├── reconciliation.js       # Phase reconciliation (2 tools)
-│   └── blocker-parser.js       # Child-agent blocker surfacing
+│   └── reconciliation.js       # Phase reconciliation (2 tools)
 ├── tool-packs/
-│   ├── index.js                # Tool pack aggregation
-│   ├── contracts.js            # Tool schema contracts
 │   ├── workspace/index.js      # 4 tools
 │   ├── session/index.js        # 10 tools
 │   └── content/index.js        # 3 tools
 ├── utils/
-│   └── extension-root.js       # Path resolution
+│   └── extension-root.js       # Canonical src/ resolution
+├── validation/                 # validate_plan checkers (schema, DAG, file overlap, agents)
 └── runtime/
     └── runtime-config-map.js   # Runtime config registry
 ```
 
 ### Content Serving and Path Resolution
 
-The content tools (`get_agent`, `get_skill_content`) are filesystem-only in every runtime:
-
-- Gemini: `primary=filesystem`, `fallback=none`
-- Claude: `primary=filesystem`, `fallback=none`
-- Codex: `primary=filesystem`, `fallback=none`
-- Qwen: `primary=filesystem`, `fallback=none`
+The content tools (`get_agent`, `get_skill_content`) are filesystem-only in every runtime: `src/mcp/content/runtime-content.js` reads the requested agent or resource from the resolved canonical `src/` directory and applies the runtime's transforms, with no registry fallback.
 
 Gemini and Qwen use the shared repo-root entrypoint at `mcp/maestro-server.js`, which requires `../src/mcp/maestro-server` directly. Their generated manifests set `MAESTRO_RUNTIME=gemini` or `MAESTRO_RUNTIME=qwen` before launch. Claude uses dual-resolution: it prefers the repo-level `src/mcp/maestro-server.js` via `fs.existsSync()` and falls back to the bundled detached payload (`claude/src/mcp/maestro-server.js`) when running outside the repo. Codex spawns `bin/maestro-mcp-server.js` via a release-versioned `npx -p @josstei/maestro@<version> maestro-mcp-server` invocation (declared in `plugins/maestro/.mcp.json`); the bin sets `MAESTRO_RUNTIME=codex` and `MAESTRO_EXTENSION_PATH`, then requires `../src/mcp/maestro-server`.
 
@@ -304,10 +295,10 @@ For detailed documentation of all seven GitHub Actions workflows, the release pi
 
 ### Test Suite
 
-86 test files using Node.js built-in `node:test`:
+81 test files using Node.js built-in `node:test`:
 
-- 53 unit test files (`tests/unit/`)
-- 13 transform test files (`tests/transforms/`)
+- 49 unit test files (`tests/unit/`)
+- 12 transform test files (`tests/transforms/`)
 - 20 integration test files (`tests/integration/`)
 
 The justfile's `just test` target uses glob expansion

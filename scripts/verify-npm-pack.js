@@ -9,6 +9,7 @@ const {
   REQUIRED_PACKAGE_FILES,
   isDeniedPath,
 } = require('./release-artifact-manifest');
+const { runCli } = require('./lib/cli');
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -23,12 +24,12 @@ function parsePackJson(stdout) {
   return JSON.parse(stdout.slice(start, end + 1));
 }
 
-function runNpmPackDryRun(root = ROOT) {
+function runNpmPackDryRun() {
   const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'maestro-npm-pack-cache-'));
 
   try {
     const stdout = execFileSync('npm', ['pack', '--dry-run', '--json', '--cache', cacheDir], {
-      cwd: root,
+      cwd: ROOT,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -63,23 +64,14 @@ function verifyPackageEntries(packages) {
   };
 }
 
-function verifyNpmPack(root = ROOT) {
-  return verifyPackageEntries(runNpmPackDryRun(root));
-}
-
 if (require.main === module) {
-  try {
-    const result = verifyNpmPack();
+  runCli('npm pack verification failed', () => {
+    const result = verifyPackageEntries(runNpmPackDryRun());
     console.log(`Verified npm pack contents: ${result.filename} (${result.entryCount} files)`);
-  } catch (error) {
-    console.error(`npm pack verification failed: ${error.message}`);
-    process.exit(1);
-  }
+  });
 }
 
 module.exports = {
   parsePackJson,
-  runNpmPackDryRun,
-  verifyNpmPack,
   verifyPackageEntries,
 };

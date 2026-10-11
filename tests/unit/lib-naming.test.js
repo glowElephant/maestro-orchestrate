@@ -9,33 +9,9 @@ const {
   toKebabCase,
   toPascalCase,
   toTitleCase,
+  escapeRegExp,
   replaceInContent,
 } = require('../../src/lib/naming');
-
-const AGENT_NAMES = [
-  'accessibility-specialist',
-  'analytics-engineer',
-  'api-designer',
-  'architect',
-  'code-reviewer',
-  'coder',
-  'compliance-reviewer',
-  'content-strategist',
-  'copywriter',
-  'data-engineer',
-  'debugger',
-  'design-system-engineer',
-  'devops-engineer',
-  'i18n-specialist',
-  'performance-engineer',
-  'product-manager',
-  'refactor',
-  'security-engineer',
-  'seo-specialist',
-  'technical-writer',
-  'tester',
-  'ux-designer',
-];
 
 const HOOK_NAMES = [
   'after-agent',
@@ -178,6 +154,19 @@ describe('toTitleCase', () => {
     assert.equal(typeof TITLE_SPECIAL_CASES, 'object');
     assert.equal(TITLE_SPECIAL_CASES['a11y-audit'], 'Accessibility Audit');
     assert.equal(TITLE_SPECIAL_CASES['seo-audit'], 'SEO Audit');
+  });
+});
+
+describe('escapeRegExp', () => {
+  it('escapes every RegExp metacharacter so the input matches literally', () => {
+    const raw = 'a.b*c+d?e^f$g{h}i(j)k|l[m]n\\o';
+    assert.equal(escapeRegExp(raw), 'a\\.b\\*c\\+d\\?e\\^f\\$g\\{h\\}i\\(j\\)k\\|l\\[m\\]n\\\\o');
+    assert.ok(new RegExp(`^${escapeRegExp(raw)}$`).test(raw));
+  });
+
+  it('leaves kebab-case and snake_case names unchanged', () => {
+    assert.equal(escapeRegExp('code-reviewer'), 'code-reviewer');
+    assert.equal(escapeRegExp('api_designer'), 'api_designer');
   });
 });
 

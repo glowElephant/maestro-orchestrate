@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { ROOT } = require('./helpers');
-const { expandManifest, assertNoMirroredSharedOutputs } = require('../../scripts/generate');
+const { expandManifest, assertNoMirroredSharedOutputs } = require('../../src/generator/manifest-expander');
 const manifestRules = require('../../src/manifest');
 const { getRuntimeConfig } = require('../../src/mcp/runtime/runtime-config-map');
 
@@ -61,14 +61,6 @@ describe('src-first architecture invariants', () => {
         false,
         `Did not expect ${relativePath} to exist in src-first mode`
       );
-    }
-  });
-
-  it('keeps all runtime content policies filesystem-first with no registry fallback', () => {
-    for (const runtimeName of ['gemini', 'claude', 'codex', 'qwen']) {
-      const runtimeConfig = getRuntimeConfig(runtimeName);
-      assert.equal(runtimeConfig.content.primary, 'filesystem');
-      assert.equal(runtimeConfig.content.fallback, 'none');
     }
   });
 
